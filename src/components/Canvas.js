@@ -19,11 +19,12 @@ const styles = () => ({
 });
 
 class Canvas extends Component {
+  animating = false;
 
   componentDidUpdate(prevProps) {
-    if (this.props.loading) this.beginAnimation();
-    if (this.props.loading !== prevProps.loading && !this.props.loading) this.stopAnimation();
-    if (this.props.results) this.drawBoundaries();
+    if (this.props.loading && !this.animating) this.beginAnimation();
+    if (!this.props.loading && this.animating) this.stopAnimation();
+    if (this.props.results && this.props.results !== prevProps.results) this.drawBoundaries();
   }
   
   drawBoundaries = () => {
@@ -51,6 +52,7 @@ class Canvas extends Component {
   }
   
   beginAnimation() {
+    this.animating = true;
     const {imgObj, windowSize} = this.props;
     this.canvas.width = CANVAS_WIDTH;
     this.canvas.height = imgObj.height * CANVAS_WIDTH / imgObj.width;
@@ -82,6 +84,7 @@ class Canvas extends Component {
   }
 
   stopAnimation = () => {
+    this.animating = false;
     clearInterval(this.intervalId);
     const ctx = this.canvas.getContext('2d');
     this.clearCanvas(ctx);

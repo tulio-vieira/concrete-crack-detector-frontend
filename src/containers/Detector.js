@@ -6,6 +6,7 @@ import ImageOutlinedIcon from '@material-ui/icons/ImageOutlined';
 import Slider from "../components/Slider";
 import ErrorHandler from "../components/ErrorHandler";
 import Canvas from "../components/Canvas";
+import ProgressDisplay from '../components/ProgressDisplay'
 
 const MAX_WINDOW_SIZE = 227;
 
@@ -81,7 +82,8 @@ class Detector extends Component {
     results: null,
     imgFile: null,
     imgObj: null,
-    sliderTouched: true
+    sliderTouched: true,
+    progress: 0
   };
 
   fileSelectedHandler = (event) => {
@@ -109,6 +111,16 @@ class Detector extends Component {
       console.log(e);
     }
   }
+
+  checkProgress = async (id) => {
+    let response = (await axios.get(`/predict/${id}`)).data;
+    if (response.progress) {
+      this.setState({progress: response.progress});
+      await new Promise((resolve, _) => setTimeout(resolve, 1000));
+      response = await this.checkProgress(id);
+    }
+    return response;
+  }
   
   makeRequest = () => {
     this.setState({ loading: true });
@@ -116,13 +128,14 @@ class Detector extends Component {
     let fd = new FormData();
     fd.append('image', this.state.imgFile);
     axios.post(`/predict?w=${this.state.windowSize}`, fd)
-    .then(response => {
-      console.log(response);
-      // this.setState({
-      //   loading: false,
-      //   results: response.data,
-      //   sliderTouched: false
-      // });
+    .then(async (response) => {
+      const results = response.data.predictions ? response.data : await this.checkProgress(response.data.job_id);
+      this.setState({
+        loading: false,
+        results,
+        sliderTouched: false,
+        progress: 0
+      });
     })
     .catch(err => {
       let errorMessage = 'Something went wrong';
@@ -130,7 +143,7 @@ class Detector extends Component {
         if (err.response.data && err.response.data.message) errorMessage = err.response.data.message;
         if (typeof err.response.data === 'string') errorMessage = err.response.data;
       } else if (err.message) errorMessage = err.message;
-      this.setState({ errorMessage, loading: false });
+      this.setState({ errorMessage, loading: false, progress: 0 });
     })
   }
 
@@ -176,6 +189,8 @@ class Detector extends Component {
               windowSize={this.state.windowSize}
               imgObj={this.state.imgObj}
               results={this.state.results} />
+
+            {this.state.progress > 0 && this.state.loading && <ProgressDisplay value={this.state.progress} />}
             
             {previewWidthPercent && !this.state.loading && this.state.sliderTouched &&
               <div className={classes.windowPreview} style={{
