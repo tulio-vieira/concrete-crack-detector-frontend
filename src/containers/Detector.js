@@ -83,7 +83,6 @@ class Detector extends Component {
     imgFile: null,
     imgObj: null,
     sliderTouched: true,
-    progress: 0
   };
 
   fileSelectedHandler = (event) => {
@@ -112,14 +111,15 @@ class Detector extends Component {
     }
   }
 
-  checkProgress = async (id) => {
+  checkProgress = async (id, counter) => {
     let response = (await axios.get(`/predict/${id}`)).data;
-    if (response.progress) {
-      this.setState({progress: response.progress});
-      await new Promise((resolve, _) => setTimeout(resolve, 1000));
-      response = await this.checkProgress(id);
+    if (counter > 180) throw new Error("Timeout of 3mins exceeded");
+    if (!response.predictions) {
+      await new Promise((resolve, _) => setTimeout(resolve, 2000));
+      return (await this.checkProgress(id, counter + 2));
+    } else {
+      return response;
     }
-    return response;
   }
   
   makeRequest = () => {
@@ -129,7 +129,8 @@ class Detector extends Component {
     fd.append('image', this.state.imgFile);
     axios.post(`/predict?w=${this.state.windowSize}`, fd)
     .then(async (response) => {
-      const results = response.data.predictions ? response.data : await this.checkProgress(response.data.job_id);
+      const results = await this.checkProgress(response.data.job_id, 0);
+      console.log(results)
       this.setState({
         loading: false,
         results,
@@ -165,7 +166,7 @@ class Detector extends Component {
       maxWindowSize
     };
   }
-
+  
   render() {
     const classes = this.props.classes;
     const previewWidthPercent = this.state.imgObj ? this.state.windowSize * 100 / this.state.imgObj.width + '%' : null;
@@ -190,7 +191,7 @@ class Detector extends Component {
               imgObj={this.state.imgObj}
               results={this.state.results} />
 
-            {this.state.progress > 0 && this.state.loading && <ProgressDisplay value={this.state.progress} />}
+            {this.state.loading && <ProgressDisplay/>}
             
             {previewWidthPercent && !this.state.loading && this.state.sliderTouched &&
               <div className={classes.windowPreview} style={{
@@ -238,7 +239,7 @@ class Detector extends Component {
               Detect
             </Button>
           }
-        
+       
         </div>
 
         <ErrorHandler

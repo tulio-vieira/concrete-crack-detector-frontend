@@ -30,8 +30,8 @@ class Canvas extends Component {
   drawBoundaries = () => {
     const { num_cols, num_rows, predictions } = this.props.results;
     const ctx = this.canvas.getContext('2d');
-    this.canvas.width = this.props.imgObj.width;
-    this.canvas.height = this.props.imgObj.height;
+    this.canvas.width = CANVAS_WIDTH;
+    this.canvas.height = this.props.imgObj.height * CANVAS_WIDTH / this.props.imgObj.width;
     const strideWidth = this.canvas.width / (num_cols + 1);
     const strideHeight = this.canvas.height / (num_rows + 1);
     const windowWidth = strideWidth * 2;
