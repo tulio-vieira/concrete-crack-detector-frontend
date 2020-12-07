@@ -1,16 +1,15 @@
 import { Component } from "react";
 import {ReactComponent as UploadSvg} from '../icons/upload.svg';
-import axios from '../axios-instance';
 import { Button, withStyles } from "@material-ui/core";
 import ImageOutlinedIcon from '@material-ui/icons/ImageOutlined';
 import Slider from "../components/Slider";
 import ErrorHandler from "../components/ErrorHandler";
 import Canvas from "../components/Canvas";
-import ProgressDisplay from '../components/ProgressDisplay'
+import ProgressDisplay from '../components/ProgressDisplay';
+import Predictor from '../Predictor';
+import {INPUT_SIZE} from '../config';
 
-const MAX_WINDOW_SIZE = 227;
-
-const styles = () => ({
+const styles = (theme) => ({
   detector: {
     marginTop: 24,
     width: '100%',
@@ -69,6 +68,15 @@ const styles = () => ({
     transform: 'translate(-50%, -50%)',
     border: '5px solid red',
     outline: '600px solid rgba(0, 0, 0, 0.5)'
+  },
+  [theme.breakpoints.down(450)]: {
+    options: {
+      flexDirection: 'column',
+      '& div': { order: -1 },
+      '& > *': {
+        margin: '8px 0'
+      }
+    }
   }
 });
 
@@ -78,11 +86,13 @@ class Detector extends Component {
     errorMessage: null,
     windowSize: null,
     minWindowSize: null,
-    maxWindowSize: MAX_WINDOW_SIZE,
-    results: null,
-    imgFile: null,
+    maxWindowSize: INPUT_SIZE,
+    predictions: null,
     imgObj: null,
     sliderTouched: true,
+    numRows: 0,
+    numCols: 0,
+    progress: 0
   };
 
   fileSelectedHandler = (event) => {
@@ -91,9 +101,8 @@ class Detector extends Component {
       let ext = event.target.files[0].name.split('.');
       ext = ext[ext.length - 1].toLowerCase();
       if (!['png', 'jpeg', 'jpg'].includes(ext)) return this.setState({errorMessage: "Invalid File type"});
-      let imgFile = event.target.files[0];
       let imgObj = new Image();
-      imgObj.src = URL.createObjectURL(imgFile);
+      imgObj.src = URL.createObjectURL(event.target.files[0]);
       imgObj.onload = () => {
         // check dimensions
         const windowData = this.verifyImageDimensions(imgObj.width, imgObj.height);
@@ -101,8 +110,7 @@ class Detector extends Component {
         this.setState({
           ...windowData,
           imgObj,
-          imgFile,
-          results: null,
+          predictions: null,
           sliderTouched: true
         });
       };
@@ -110,49 +118,40 @@ class Detector extends Component {
       console.log(e);
     }
   }
-
-  checkProgress = async (id, counter) => {
-    let response = (await axios.get(`/predict/${id}`)).data;
-    if (counter > 180) throw new Error("Timeout of 3mins exceeded");
-    if (!response.predictions) {
-      await new Promise((resolve, _) => setTimeout(resolve, 2000));
-      return (await this.checkProgress(id, counter + 2));
-    } else {
-      return response;
-    }
-  }
   
-  makeRequest = () => {
-    this.setState({ loading: true });
-    if (!this.state.imgFile) return;
-    let fd = new FormData();
-    fd.append('image', this.state.imgFile);
-    axios.post(`/predict?w=${this.state.windowSize}`, fd)
-    .then(async (response) => {
-      const results = await this.checkProgress(response.data.job_id, 0);
-      console.log(results)
+  makeRequest = async () => {
+    if (!this.state.imgObj) return;
+    const numRows = Math.floor( (this.state.imgObj.height * 2) / this.state.windowSize - 1 );
+    const numCols = Math.floor( (this.state.imgObj.width * 2) / this.state.windowSize - 1 );
+    this.setState({
+      loading: true,
+      numRows,
+      numCols 
+    });
+    try {
+      const predictor = new Predictor(this.state.imgObj, numRows, numCols, (progress) => this.setState({progress}));
+      const predictions = await predictor.getPredictions();
       this.setState({
         loading: false,
-        results,
+        predictions,
         sliderTouched: false,
         progress: 0
       });
-    })
-    .catch(err => {
-      let errorMessage = 'Something went wrong';
-      if (err.response) {
-        if (err.response.data && err.response.data.message) errorMessage = err.response.data.message;
-        if (typeof err.response.data === 'string') errorMessage = err.response.data;
-      } else if (err.message) errorMessage = err.message;
-      this.setState({ errorMessage, loading: false, progress: 0 });
-    })
+    } catch(err) {
+      this.setState({
+        loading: false,
+        errorMessage: err.message || 'Something went wrong...',
+        sliderTouched: false,
+        progress: 0
+      });
+    }
   }
 
   verifyImageDimensions = (L, H) => {
     let delta = Math.pow( ( H*H + 7598*H*L + L*L ), 0.5 );
     let minWindowSize = Math.ceil( (delta - H - L) / 1899 );
     if (minWindowSize < 10 ) minWindowSize = 10;
-    let maxWindowSize = MAX_WINDOW_SIZE;
+    let maxWindowSize = INPUT_SIZE;
     if (this.state.maxWindowSize > L || this.state.maxWindowSize > H) {
       maxWindowSize = L < H ? L : H;
     }
@@ -185,13 +184,15 @@ class Detector extends Component {
 
             <img src={this.state.imgObj.src} style={{width: '100%'}} alt=''/>
 
-            <Canvas
-              loading={this.state.loading}
-              windowSize={this.state.windowSize}
-              imgObj={this.state.imgObj}
-              results={this.state.results} />
+            {this.state.predictions &&
+              <Canvas
+                imgObj={this.state.imgObj}
+                numRows={this.state.numRows}
+                numCols={this.state.numCols}
+                predictions={this.state.predictions} />
+            }
 
-            {this.state.loading && <ProgressDisplay/>}
+            {this.state.loading && <ProgressDisplay progress={this.state.progress} />}
             
             {previewWidthPercent && !this.state.loading && this.state.sliderTouched &&
               <div className={classes.windowPreview} style={{
