@@ -148,9 +148,7 @@ class Detector extends Component {
   }
 
   verifyImageDimensions = (L, H) => {
-    let delta = Math.pow( ( H*H + 7598*H*L + L*L ), 0.5 );
-    let minWindowSize = Math.ceil( (delta - H - L) / 1899 );
-    if (minWindowSize < 10 ) minWindowSize = 10;
+    let minWindowSize = 10;
     let maxWindowSize = INPUT_SIZE;
     if (this.state.maxWindowSize > L || this.state.maxWindowSize > H) {
       maxWindowSize = L < H ? L : H;

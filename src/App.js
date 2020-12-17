@@ -54,7 +54,7 @@ export default function App() {
         <Detector />
       </main>
       <footer className={classes.footer}>
-        <p>Created by: Tulio Vieira</p>
+        <p>created by: Tulio Vieira</p>
         <p><a href="https://github.com/tulio-vieira/"><GitHub style={{height: '0.8em'}}/><span>/tulio-vieira</span></a></p>
       </footer>
     </ThemeProvider>

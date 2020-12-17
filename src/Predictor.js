@@ -1,5 +1,5 @@
 import * as tf from '@tensorflow/tfjs';
-import {INPUT_SIZE, BATCH_SIZE} from './config';
+import {INPUT_SIZE, BATCH_SIZE, NUM_PROGRESS_UPDATES} from './config';
 
 let modelPromise = tf.loadLayersModel(process.env.PUBLIC_URL + '/tfjs_model/model.json')
   .catch(err => {
@@ -8,9 +8,11 @@ let modelPromise = tf.loadLayersModel(process.env.PUBLIC_URL + '/tfjs_model/mode
 
 export default class Predictor {
   constructor(imgObj, numRows, numCols, setProgress) {
-    this.imgTensor = tf.browser.fromPixels(imgObj);
-    this.imgTensor = tf.div(this.imgTensor, tf.scalar(255));
-    this.imgTensor = tf.expandDims(this.imgTensor, 0);
+    this.imgTensor = tf.tidy(() => {
+      let imgTensor = tf.browser.fromPixels(imgObj);
+      imgTensor = tf.div(imgTensor, tf.scalar(255));
+      return tf.expandDims(imgTensor, 0);
+    });
     this.numRows = numRows;
     this.numCols = numCols;
     this.setProgress = setProgress;
@@ -21,13 +23,14 @@ export default class Predictor {
   getPredictions = async () => {
     this.model = await modelPromise;
     if (!this.model) throw new Error('Connection failed');
+    this.counter = 0;
     return (await new Promise((resolve, reject) => this.predictBatch(0, resolve, reject)));
   }
 
   predictBatch = async (sliceStart, resolve, reject) => {
     try {
       let sliceEnd = (sliceStart + BATCH_SIZE > this.boxes.length) ? this.boxes.length : sliceStart + BATCH_SIZE;
-      tf.engine().startScope();
+
       let cropsBatch = tf.image.cropAndResize(
         this.imgTensor,
         this.boxes.slice(sliceStart, sliceEnd),
@@ -35,11 +38,23 @@ export default class Predictor {
         [INPUT_SIZE, INPUT_SIZE]
       );
       let newPredictions = this.model.predict(cropsBatch);
-      newPredictions = (await newPredictions.data()).filter((_, i) => (i % 2) ).map(pred => Math.round(pred));
-      this.predictions = this.predictions.concat(Array.from(newPredictions));
-      tf.engine().endScope();
-      this.setProgress(Math.floor(sliceEnd * 100 / this.boxes.length));
-      sliceEnd === this.boxes.length ? resolve(this.predictions) : setTimeout(this.predictBatch.bind(this, sliceEnd, resolve, reject), 0);
+      cropsBatch.dispose();
+      const newPredictionsTypedArr = (await newPredictions.data()).filter((_, i) => (i % 2) ).map(pred => Math.round(pred));
+      newPredictions.dispose();
+      this.predictions = this.predictions.concat(Array.from(newPredictionsTypedArr));
+
+      if (sliceEnd / this.boxes.length > this.counter / NUM_PROGRESS_UPDATES) {
+        this.counter++;
+        this.setProgress(Math.floor(100 * sliceEnd / this.boxes.length));
+      }
+      if (sliceEnd === this.boxes.length) {
+        this.imgTensor.dispose();
+        delete this.boxes;
+        delete this.boxIndices;
+        resolve(this.predictions);
+      } else {
+        setTimeout(this.predictBatch.bind(this, sliceEnd, resolve, reject), 0);
+      }
     } catch(err) {
       console.log(err);
       reject(err);

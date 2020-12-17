@@ -6,6 +6,8 @@ The user selects an image of a concrete surface with cracks, and then the model 
 
 ![Demo image](https://github.com/tulio-vieira/concrete-crack-detector-app/blob/master/demo.jpeg?raw=true)
 
+The heart of the app is the preprocessing step for the sliding window, which uses the [tensorflowjs API](https://www.tensorflow.org/js). This step is separated in a special class, written in this [file](https://github.com/tulio-vieira/concrete-crack-detector-frontend/blob/main/src/Predictor.js).
+
 Technologies used:
  - Tensorflow JS
  - React
